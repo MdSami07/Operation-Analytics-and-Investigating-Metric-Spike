@@ -1,0 +1,127 @@
+**SQL Queries**
+
+---> Case Study 1 (Job Data)  
+
+A. Number of jobs reviewed: Amount of jobs reviewed over time.
+Your task: Calculate the number of jobs reviewed per hour per day for November 2020?   
+
+SELECT COUNT(job_id)/(30*24) AS num_jobs_reviewed
+FROM `sqlproject-1`
+WHERE
+ds BETWEEN '2020-11-01' AND '2020-11-30';  
+
+B. Throughput: It is the no. of events happening per second.
+Your task: Let’s say the above metric is called throughput. Calculate 7 day rolling
+average of throughput? For throughput, do you prefer daily metric or 7-day rolling and
+why?  
+
+SELECT ds,
+jobs_reviewed,
+AVG (jobs_reviewed) OVER (ORDER BY ds rows BETWEEN 6 preceding and current row) AS
+rolling_average
+FROM
+( SELECT ds,
+COUNT(DISTINCT(job_id) ) AS jobs_reviewed
+FROM `sqlproject-1`
+WHERE ds BETWEEN "2020-11-01" AND "2020-11-30"
+GROUP BY ds
+ORDER BY ds )a;  
+
+C. Percentage share of each language: Share of each language for different contents.
+Your task: Calculate the percentage share of each language in the last 30 days?  
+
+SELECT language,
+num_jobs,
+100.0* (num_jobs/total_jobs) AS pct_share
+FROM
+( SELECT language, COUNT(job_id) AS num_jobs
+FROM `sqlproject-1`
+GROUP BY language ) a
+CROSS JOIN
+( SELECT COUNT(job_id) AS total_jobs
+FROM `sqlproject-1` ) b;  
+
+D. Duplicate rows: Rows that have the same value present in them.
+Your task: Let’s say you see some duplicate rows in the data. How will you display
+duplicates from the table?  
+
+SELECT *
+FROM
+( SELECT *,
+row_number() OVER (PARTITION BY job_id) AS rownum FROM `sqlproject-1`) a
+WHERE rownum>1;  
+
+---> Case Study 2 (Investigating Metrics Spikes)  
+
+A. User Engagement: To measure the activeness of a user. Measuring if the user finds
+quality in a product/service.
+Your task: Calculate the weekly user engagement?  
+
+SELECT EXTRACT(WEEK FROM occurred_at) AS weeknum, COUNT(DISTINCT user_id)
+FROM events GROUP BY weeknum;  
+
+B. User Growth: Amount of users growing over time for a product.
+Your task: Calculate the user growth for product?  
+
+SELECT year, weeknum, num_active_users,
+SUM(num_active_users) OVER (ORDER BY year, weeknum ROWS BETWEEN
+UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_active_users
+FROM
+(SELECT EXTRACT( YEAR FROM activated_at) AS year,
+EXTRACT(WEEK FROM activated_at) AS weeknum,
+COUNT(DISTINCT user_id) AS num_active_users
+FROM users a
+WHERE state='active'
+GROUP BY year, weeknum
+ORDER BY year, weeknum ) a;  
+
+C. Weekly Retention: Users getting retained weekly after signing-up for a product.
+Your task: Calculate the weekly retention of users-sign up cohort?  
+
+SELECT COUNT(user_id) AS num_users, SUM(CASE WHEN retention_week = 1 THEN 1
+ELSE 0 end) AS per_week_retention
+FROM
+( SELECT a.user_id,
+a.sign_up_week,
+b.engagement_week, b.engagement_week - a.sign_up_week AS retention_week
+FROM
+((SELECT DISTINCT user_id,
+EXTRACT(WEEK FROM occurred_at) AS sign_up_week FROM events
+WHERE event_type = 'signup_flow'and event_name = 'complete_signup'
+AND EXTRACT(WEEK FROM occurred_at)=18) a
+LEFT JOIN
+(SELECT DISTINCT user_id,
+EXTRACT(WEEK FROM occurred_at) AS engagement_week
+FROM events
+WHERE event_type = 'engagement') b
+ON A.USER_ID = B.USER_ID)
+GROUP BY 1,2,3
+ORDER BY user_id) c  
+
+D. Weekly Engagement: To measure the activeness of a user. Measuring if the user finds
+quality in a product/service weekly.
+Your task: Calculate the weekly engagement per device?  
+
+SELECT EXTRACT(YEAR FROM occurred_at) AS year,
+EXTRACT(WEEK FROM occurred_at) AS week,
+device,
+COUNT(DISTINCT user_id )
+FROM events
+WHERE event_type = “engagement”
+GROUP BY 1,2,3
+ORDER BY 1,2,3;  
+
+E. Email Engagement: Users engaging with the email service.
+Your task: Calculate the email engagement metrics?  
+
+SELECT EXTRACT(WEEK FROM occurred_at) AS week,
+COUNT(CASE WHEN e.action = 'sent_weekly_digest' THEN e.user_id ELSE NULL END) AS
+weekly_emails,
+COUNT(CASE WHEN e.action = 'sent_reengagement_email' THEN e.user_id ELSE NULL
+END) AS reengagement_emails,
+COUNT(CASE WHEN e.action = 'email_open' THEN e.user_id ELSE NULL END) AS
+email_opens,
+COUNT(CASE WHEN e.action = 'email_clickthrough' THEN e.user_id ELSE NULL END) AS
+email_clickthroughs
+FROM email_events e
+GROUP BY 1;
